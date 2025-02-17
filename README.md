@@ -1,82 +1,126 @@
-# Roman Urdu Poetry Generation Using RNN
+# Roman Urdu Poetry Generator
 
-This project demonstrates how to generate **Roman Urdu poetry** using an **RNN (Recurrent Neural Network)** model, specifically built with **TensorFlow** and **Keras**. We will train an RNN-based model using a dataset of Roman Urdu poetry and deploy it with a simple front-end using **Gradio**.
+This project demonstrates how to generate **Roman Urdu poetry** using a Recurrent Neural Network (RNN) model built with TensorFlow and Keras. The model is trained on a dataset of Roman Urdu poetry, and once trained, it can sample new poetry from a given seed phrase. The generated text is then translated into Urdu script using the Deep Translator. Finally, a simple front-end is deployed using Gradio so that anyone can interact with the model.
 
 ## Table of Contents
 
 1. [Introduction](#introduction)
 2. [Dataset](#dataset)
-3. [Model](#model)
-4. [Training](#training)
-5. [Generating Poetry](#generating-poetry)
-6. [Deployment with Gradio](#deployment-with-gradio)
-7. [Setup Instructions](#setup-instructions)
-8. [Contributing](#contributing)
-9. [License](#license)
+3. [Model and Training](#model-and-training)
+4. [Generating and Translating Poetry](#generating-and-translating-poetry)
+5. [Deployment with Gradio](#deployment-with-gradio)
+6. [Setup Instructions](#setup-instructions)
+7. [Contributing](#contributing)
+8. [License](#license)
 
 ---
 
 ## Introduction
 
-This project is focused on training an **RNN-based model** to generate **Roman Urdu poetry**. The model learns the structure and style of the poetry by looking at various famous poets' works in Roman Urdu. Once trained, the model can be used to generate new lines of poetry.
+The goal of this project is to train an RNN (or its variant, such as LSTM or GRU) on Roman Urdu poetry so that we can later sample new, creative poetry. After training, the model generates poetry based on a seed text in Roman Urdu, and then the output is translated into Urdu script. The project also includes a simple front-end built with Gradio for quick interaction and demonstration.
 
-Additionally, a **Gradio** frontend is created to make it easy to interact with the model and generate poetry on demand.
+---
 
 ## Dataset
 
-The dataset for training consists of **Roman Urdu poetry** collected from various sources. The dataset includes columns for the poet’s name and the poetry text itself.
-
-### Dataset Columns
+The dataset used in this project is a CSV file named `Roman-Urdu-Poetry.csv`, which contains the following columns:
 
 - **ID**: Unique identifier for each poem.
-- **Poet**: The poet’s name.
+- **Poet**: Name of the poet.
 - **Poetry**: The Roman Urdu poetry text.
 
-Sample:
+A sample row from the dataset:
 
-| ID  | Poet           | Poetry                                                                                       |
-|-----|----------------|----------------------------------------------------------------------------------------------|
-| 1   | Ahmad Faraz    | tarīq-e-ishq meñ mujh ko koī kāmil nahīñ miltā ga.e farhād o majnūñ ab kisī se dil nahīñ miltā |
-| 2   | Allama Iqbal   | ishq hi zindagi hai, ishq hi mazhab hai, kisī se bhi agar kuchh mangna ho toh ishq hi dikhāye |
+| ID  | Poet         | Poetry                                                                                       |
+|-----|--------------|----------------------------------------------------------------------------------------------|
+| 1   | Ahmad Faraz  | tarīq-e-ishq meñ mujh ko koī kāmil nahīñ miltā ga.e farhād o majnūñ ab kisī se dil nahīñ miltā |
 
-## Model
+---
 
-For this task, we use a **SimpleRNN** model from **Keras** with the following architecture:
+## Model and Training
 
-- **Embedding Layer**: To convert words into embeddings.
-- **Simple RNN Layer**: To capture the sequential nature of poetry.
-- **Dropout Layer**: To avoid overfitting.
-- **Dense Layer**: To predict the next word in the sequence.
+The model is built using a simple RNN architecture in Keras. The steps include:
 
-The model is trained on sequences of words from the poetry text, and it generates the next word given a sequence of previous words.
+1. **Data Preprocessing**:  
+   - Tokenize the poetry text.
+   - Convert the text into sequences of integers.
+   - Create input-output pairs for training.
+   - Reshape the input for the RNN (samples, time_steps, features).
 
-### Hyperparameters:
+2. **Model Architecture**:  
+   - Two SimpleRNN layers (with dropout for regularization).
+   - A Dense output layer with softmax activation to predict the next word.
 
-- **Sequence length**: 5 (i.e., the model looks at the last 5 words to predict the next word)
-- **Vocabulary size**: The total number of unique words in the dataset.
-- **Hidden units in RNN**: 128 units in the RNN layer.
+3. **Training**:  
+   - The model is compiled with the `sparse_categorical_crossentropy` loss function and the `adam` optimizer.
+   - After training, the model is saved to a file for later use.
 
-## Training
-
-The model is trained on the tokenized version of the poetry dataset, where each word is converted to an integer based on a **word-to-index mapping**. After training, the model is capable of generating poetry by predicting the next word in a sequence.
-
-### Steps:
-1. **Data Preprocessing**: Tokenize the poetry, create sequences of words, and prepare the input-output pairs.
-2. **Model Training**: Train the RNN model on the sequences using **sparse categorical cross-entropy loss** and **Adam optimizer**.
-3. **Model Evaluation**: Evaluate the performance of the model on unseen sequences.
-
-## Generating Poetry
-
-Once the model is trained, we can generate Roman Urdu poetry by feeding it an initial seed sequence. The model predicts one word at a time and appends it to the sequence, generating a new line of poetry.
+### Training Code
 
 ```python
-def generate_poetry(seed_text, model, idx2word, word2idx, max_sequence_length=5):
-    for _ in range(50):  # Generate up to 50 words
-        tokenized_seed = [word2idx[word] for word in seed_text.split()]
-        tokenized_seed = pad_sequences([tokenized_seed], maxlen=max_sequence_length, padding='post')
-        predicted_word_idx = model.predict(tokenized_seed, verbose=0).argmax(axis=1)[0]
-        predicted_word = idx2word[predicted_word_idx]
-        seed_text += ' ' + predicted_word
-        if predicted_word == '<END>':
-            break
-    return seed_text
+import numpy as np
+import pandas as pd
+import nltk
+from nltk.tokenize import word_tokenize
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import SimpleRNN, Dense, Dropout
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+# Download required NLTK data
+nltk.download('punkt')
+
+# Load the poetry dataset (Kaggle path)
+df = pd.read_csv('/kaggle/input/roman-urdu-poetry-csv/Roman-Urdu-Poetry.csv')
+
+# Check column names and standardize (rename "Poetry" to "poetry")
+print("Dataset Columns:", df.columns)
+df.rename(columns={"Poetry": "poetry"}, inplace=True)
+
+# Drop missing values and convert poetry to list of strings
+df = df.dropna(subset=['poetry'])
+poetry_texts = df['poetry'].astype(str).tolist()
+
+# Create a tokenizer and fit on the texts
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(poetry_texts)
+
+# Convert poetry texts to sequences of integers
+sequences = tokenizer.texts_to_sequences(poetry_texts)
+
+# Prepare Input (X) and Output (y) sequences
+sequence_length = 5  # You can adjust this as needed
+X_rnn = []
+y_rnn = []
+for seq in sequences:
+    for i in range(len(seq) - sequence_length):
+        X_rnn.append(seq[i:i + sequence_length])  # Input sequence
+        y_rnn.append(seq[i + sequence_length])      # Next word as output
+
+X_rnn = np.array(X_rnn)
+y_rnn = np.array(y_rnn)
+
+# Reshape X_rnn for RNN: (samples, time_steps, features)
+X_rnn = X_rnn.reshape(X_rnn.shape[0], X_rnn.shape[1], 1)
+
+# Vocabulary size
+vocab_size = len(tokenizer.word_index) + 1
+print("Vocabulary Size:", vocab_size)
+
+# Define the RNN Model using SimpleRNN
+model_rnn = Sequential([
+    SimpleRNN(128, return_sequences=True, input_shape=(X_rnn.shape[1], 1)),
+    Dropout(0.2),
+    SimpleRNN(128),
+    Dense(vocab_size, activation='softmax')
+])
+
+# Compile the model
+model_rnn.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+# Train the model
+model_rnn.fit(X_rnn, y_rnn, epochs=5, batch_size=64)
+
+# Save the trained model
+model_rnn.save("/kaggle/working/rnn_poetry_model.h5")
+print("Model saved successfully!")
